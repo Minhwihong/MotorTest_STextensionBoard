@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdint.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -93,27 +93,30 @@ float adc1_volt[4] = { 1.0f,1.0f,1.0f,1.0f};
 float adc2_volt[4] = { 1.0f,1.0f,1.0f,1.0f};
 
 
-// 홀 센서 입력 핀 정의
-#define HALL1_PIN GPIO_PIN_0
-#define HALL2_PIN GPIO_PIN_1
-#define HALL3_PIN GPIO_PIN_2
-#define HALL_PORT GPIOA
+uint8_t g_aucHall[3];
 
-uint16_t g_uiBldcDuty = 0;
 
-// 함수 선언
-void Update_SixStep_Commutation(void);
+
+
+uint16_t g_uiBldcDuty = 1000;
+
+// ?��?�� ?��?��
+void Update_SixStep_Commutation_GPT(void);
+void Update_SixStep_Commutation_Book(void);
+void Update_SixStep_Commutation_Mode2(void);
 uint8_t Read_Hall_Sensors(void);
+static void TIM_ComplementaryChCtl(TIM_TypeDef *TIMx, uint32_t Channel, uint32_t ChannelNState);
 
 TIM_HandleTypeDef htim1;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-    if (GPIO_Pin == HALL1_PIN || GPIO_Pin == HALL2_PIN || GPIO_Pin == HALL3_PIN) {
-        Update_SixStep_Commutation();
+    if (GPIO_Pin == GPE_HALL_3_Pin || GPIO_Pin == GPE_HALL_2_Pin || GPIO_Pin == GPE_HALL_1_Pin) {
+    	//Update_SixStep_Commutation_Book();
+      Update_SixStep_Commutation_Mode2();
     }
 }
 
-void Update_SixStep_Commutation(void) {
+void Update_SixStep_Commutation_GPT(void) {
     uint8_t hallState = Read_Hall_Sensors();
 
     switch (hallState) {
@@ -121,76 +124,103 @@ void Update_SixStep_Commutation(void) {
         case 0b101:  // Hall state 5
         	// Phase A : current in
             __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, g_uiBldcDuty);
+            TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_DISABLE);
 
             // Phase B : current out
             __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
-            HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);  	// Duty is 0, then Complementary out is always 100% duty
+            TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_ENABLE);	// Duty is 0, then Complementary out is always 100% duty
+
             // Phase C : HiZ
             __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
-            HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
+            TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_DISABLE);
             break;
 
         case 0b100:  // Hall state 4
+        	// Phase A : HiZ
             __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
-            HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_1);
+            TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_DISABLE);
 
+            // Phase B : current out
             __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
-            HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+            TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_ENABLE);
 
+            // Phase B : current in
             __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, g_uiBldcDuty);
+            TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_DISABLE);
             break;
 
         case 0b110:
+        	// Phase A :  current out
         	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
-        	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+        	TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_ENABLE);
 
+        	// Phase B : current in
 			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, g_uiBldcDuty);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_DISABLE);
 
+			// Phase C : HiZ
 			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
-			HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_DISABLE);
         	break;
 
         case 0b010:
+        	// Phase A :  current out
         	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
-        	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+        	TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_ENABLE);
 
+        	// Phase B : HiZ
 			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
-			HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_DISABLE);
 
+			// Phase C : current in
 			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, g_uiBldcDuty);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_DISABLE);
         	break;
 
         case 0b011:
+        	// Phase A :  HiZ
         	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
-        	HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_1);
+        	TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_DISABLE);
 
+        	// Phase B :  current in
 			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, g_uiBldcDuty);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_DISABLE);
 
+			// Phase C :  current out
 			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
-			HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_ENABLE);
         	break;
 
         case 0b001:
+        	// Phase A :  current in
         	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, g_uiBldcDuty);
+        	TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_DISABLE);
 
+        	// Phase A :  HiZ
 			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
-			HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_DISABLE);
 
+			// Phase A :  current out
 			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
-			HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
-
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_ENABLE);
         	break;
 
-        // 추가 상태 정의 (0b110, 0b010, 0b011, 0b001)
-        // 각 상태에서 TIM1의 출력 상태 설정
+        // 추�? ?��?�� ?��?�� (0b110, 0b010, 0b011, 0b001)
+        // �?????? ?��?��?��?�� TIM1?�� 출력 ?��?�� ?��?��
     }
 }
 
+
+uint8_t hallState = 0;
+
+
+
+
 uint8_t Read_Hall_Sensors(void) {
-    uint8_t h1 = HAL_GPIO_ReadPin(HALL_PORT, HALL1_PIN);
-    uint8_t h2 = HAL_GPIO_ReadPin(HALL_PORT, HALL2_PIN);
-    uint8_t h3 = HAL_GPIO_ReadPin(HALL_PORT, HALL3_PIN);
-    return (h1 << 2) | (h2 << 1) | h3;
+    uint8_t h1 = HAL_GPIO_ReadPin(GPE_HALL_1_GPIO_Port, GPE_HALL_1_Pin);
+    uint8_t h2 = HAL_GPIO_ReadPin(GPE_HALL_2_GPIO_Port, GPE_HALL_2_Pin);
+    uint8_t h3 = HAL_GPIO_ReadPin(GPE_HALL_3_GPIO_Port, GPE_HALL_3_Pin);
+    return ((h1 << 2) + (h2 << 1) + h3);
 }
 
 
@@ -209,6 +239,8 @@ static void TIM_ComplementaryChCtl(TIM_TypeDef *TIMx, uint32_t Channel, uint32_t
   TIMx->CCER |= (uint32_t)(ChannelNState << (Channel & 0xFU)); /* 0xFU = 15 bits max shift */
 }
 
+uint8_t g_ucDrvEn = 0;
+uint8_t g_ucStandy = 0;
 
 /* USER CODE END 0 */
 
@@ -249,19 +281,30 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+   //HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+   //HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+   //HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
+
+
+  //TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_DISABLE);
+  //TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_DISABLE);
+  //TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_DISABLE);
 
   HAL_TIM_Base_Start(&htim6);
 
 
+  //HAL_GPIO_WritePin(DRV_STANDBY_GPIO_Port, DRV_STANDBY_Pin, 0);
+  //HAL_GPIO_WritePin(DRV_ENABLE_GPIO_Port, DRV_ENABLE_Pin, 1);
   HAL_Delay(100);
-
+  g_ucDrvEn = 1;
+  HAL_GPIO_WritePin(DRV_STANDBY_GPIO_Port, DRV_STANDBY_Pin, 1);
+  HAL_Delay(100);
   //htim1.Instance->CCER
 
-
+  //Update_SixStep_Commutation_Mode2();
 //  //HAL_ADC_Start(&hadc2);
 //  HAL_ADCEx_MultiModeStart_DMA(&hadc1, (uint32_t *)&g_usAdcCh1_raw, 4);
 
@@ -271,6 +314,14 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1, 4250-1) ;
+	  HAL_GPIO_WritePin(BLDC_U_EN_GPIO_Port, BLDC_U_EN_Pin, GPIO_PIN_SET);
+	  HAL_GPIO_WritePin(BLDC_V_EN_GPIO_Port, BLDC_V_EN_Pin, GPIO_PIN_SET);
+	  HAL_GPIO_WritePin(BLDC_W_EN_GPIO_Port, BLDC_W_EN_Pin, GPIO_PIN_SET);
+
+
+	  HAL_GPIO_WritePin(DRV_ENABLE_GPIO_Port, DRV_ENABLE_Pin, g_ucDrvEn);
+#if 0
 	  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1, g_uiT3c1_duty) ;
 
 	  if(g_uiUpdated != 0){
@@ -286,6 +337,15 @@ int main(void)
 		  }
 
 	  }
+#endif
+
+    uint8_t h1 = HAL_GPIO_ReadPin(GPE_HALL_1_GPIO_Port, GPE_HALL_1_Pin);
+    uint8_t h2 = HAL_GPIO_ReadPin(GPE_HALL_2_GPIO_Port, GPE_HALL_2_Pin);
+    uint8_t h3 = HAL_GPIO_ReadPin(GPE_HALL_3_GPIO_Port, GPE_HALL_3_Pin);
+    g_aucHall[0] = h1;
+    g_aucHall[1] = h2;
+    g_aucHall[2] = h3;
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -591,6 +651,7 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 0 */
 
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
   TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
@@ -605,7 +666,16 @@ static void MX_TIM1_Init(void)
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_Init(&htim1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -616,22 +686,22 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.OCMode = TIM_OCMODE_TIMING;
   sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
-  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
   }
-  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
   {
     Error_Handler();
   }
@@ -732,7 +802,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, BOARD_LED_Pin|DRV_ENABLE_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, BLDC_U_EN_Pin|BLDC_V_EN_Pin|BLDC_W_EN_Pin|DRV_STANDBY_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -740,18 +813,38 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : BOARD_LED_Pin */
-  GPIO_InitStruct.Pin = BOARD_LED_Pin;
+  /*Configure GPIO pins : BOARD_LED_Pin DRV_ENABLE_Pin */
+  GPIO_InitStruct.Pin = BOARD_LED_Pin|DRV_ENABLE_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(BOARD_LED_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : GPE_HALL_W_Pin */
-  GPIO_InitStruct.Pin = GPE_HALL_W_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  /*Configure GPIO pins : GPE_HALL_3_Pin GPE_HALL_2_Pin */
+  GPIO_InitStruct.Pin = GPE_HALL_3_Pin|GPE_HALL_2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPE_HALL_W_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : BLDC_U_EN_Pin BLDC_V_EN_Pin BLDC_W_EN_Pin DRV_STANDBY_Pin */
+  GPIO_InitStruct.Pin = BLDC_U_EN_Pin|BLDC_V_EN_Pin|BLDC_W_EN_Pin|DRV_STANDBY_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : GPE_HALL_1_Pin */
+  GPIO_InitStruct.Pin = GPE_HALL_1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPE_HALL_1_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -759,6 +852,196 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+
+
+void Update_SixStep_Commutation_Mode2(void) {
+    hallState = Read_Hall_Sensors();
+
+    switch (hallState) {
+
+        case 0b101:
+        	// Phase A : current in
+            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, g_uiBldcDuty);
+            HAL_GPIO_WritePin(BLDC_U_EN_GPIO_Port, BLDC_U_EN_Pin, GPIO_PIN_SET);
+
+            // Phase B : current out
+            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+            HAL_GPIO_WritePin(BLDC_V_EN_GPIO_Port, BLDC_V_EN_Pin, GPIO_PIN_SET);	// Duty is 0, then Complementary out is always 100% duty
+
+            // Phase C : HiZ
+            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+            HAL_GPIO_WritePin(BLDC_W_EN_GPIO_Port, BLDC_W_EN_Pin, GPIO_PIN_RESET);
+            break;
+
+        case 0b100:
+        	// Phase A :  current in
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, g_uiBldcDuty);
+			HAL_GPIO_WritePin(BLDC_U_EN_GPIO_Port, BLDC_U_EN_Pin, GPIO_PIN_SET);
+
+			// Phase B :  HiZ
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+			HAL_GPIO_WritePin(BLDC_V_EN_GPIO_Port, BLDC_V_EN_Pin, GPIO_PIN_RESET);
+
+			// Phase C :  current out
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+			HAL_GPIO_WritePin(BLDC_W_EN_GPIO_Port, BLDC_W_EN_Pin, GPIO_PIN_SET);
+            break;
+
+        case 0b110:
+        	// Phase A :  HiZ
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+			HAL_GPIO_WritePin(BLDC_U_EN_GPIO_Port, BLDC_U_EN_Pin, GPIO_PIN_RESET);
+
+			// Phase B :  current in
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, g_uiBldcDuty);
+			HAL_GPIO_WritePin(BLDC_V_EN_GPIO_Port, BLDC_V_EN_Pin, GPIO_PIN_SET);
+
+			// Phase C :  current out
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+			HAL_GPIO_WritePin(BLDC_W_EN_GPIO_Port, BLDC_W_EN_Pin, GPIO_PIN_SET);
+        	break;
+
+        case 0b010:
+        	// Phase A :  current out
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+			HAL_GPIO_WritePin(BLDC_U_EN_GPIO_Port, BLDC_U_EN_Pin, GPIO_PIN_SET);
+
+			// Phase B : current in
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, g_uiBldcDuty);
+			HAL_GPIO_WritePin(BLDC_V_EN_GPIO_Port, BLDC_V_EN_Pin, GPIO_PIN_SET);
+
+			// Phase C : HiZ
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+			HAL_GPIO_WritePin(BLDC_W_EN_GPIO_Port, BLDC_W_EN_Pin, GPIO_PIN_RESET);
+        	break;
+
+        case 0b011:
+        	// Phase A :  current out
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+			HAL_GPIO_WritePin(BLDC_U_EN_GPIO_Port, BLDC_U_EN_Pin, GPIO_PIN_SET);
+
+			// Phase B : HiZ
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+			HAL_GPIO_WritePin(BLDC_V_EN_GPIO_Port, BLDC_V_EN_Pin, GPIO_PIN_RESET);
+
+			// Phase C : current in
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, g_uiBldcDuty);
+			HAL_GPIO_WritePin(BLDC_W_EN_GPIO_Port, BLDC_W_EN_Pin, GPIO_PIN_SET);
+        	break;
+
+        case 0b001:
+        	// Phase A : HiZ
+				__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+				HAL_GPIO_WritePin(BLDC_U_EN_GPIO_Port, BLDC_U_EN_Pin, GPIO_PIN_RESET);
+
+				// Phase B : current out
+				__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+				HAL_GPIO_WritePin(BLDC_V_EN_GPIO_Port, BLDC_V_EN_Pin, GPIO_PIN_SET);
+
+				// Phase B : current in
+				__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, g_uiBldcDuty);
+				HAL_GPIO_WritePin(BLDC_W_EN_GPIO_Port, BLDC_W_EN_Pin, GPIO_PIN_SET);
+        	break;
+
+        // 추�? ?��?�� ?��?�� (0b110, 0b010, 0b011, 0b001)
+        // �?????? ?��?��?��?�� TIM1?�� 출력 ?��?�� ?��?��
+    }
+}
+
+
+void Update_SixStep_Commutation_Book(void) {
+    hallState = Read_Hall_Sensors();
+
+    switch (hallState) {
+
+        case 0b101:
+        	// Phase A : current in
+            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, g_uiBldcDuty);
+            TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_DISABLE);
+
+            // Phase B : current out
+            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+            TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_ENABLE);	// Duty is 0, then Complementary out is always 100% duty
+
+            // Phase C : HiZ
+            __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+            TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_DISABLE);
+            break;
+
+        case 0b100:
+        	// Phase A :  current in
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, g_uiBldcDuty);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_DISABLE);
+
+			// Phase A :  HiZ
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_DISABLE);
+
+			// Phase A :  current out
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_ENABLE);
+            break;
+
+        case 0b110:
+        	// Phase A :  HiZ
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_DISABLE);
+
+			// Phase B :  current in
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, g_uiBldcDuty);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_DISABLE);
+
+			// Phase C :  current out
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_ENABLE);
+        	break;
+
+        case 0b010:
+        	// Phase A :  current out
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_ENABLE);
+
+			// Phase B : current in
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, g_uiBldcDuty);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_DISABLE);
+
+			// Phase C : HiZ
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_DISABLE);
+        	break;
+
+        case 0b011:
+        	// Phase A :  current out
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_ENABLE);
+
+			// Phase B : HiZ
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_DISABLE);
+
+			// Phase C : current in
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, g_uiBldcDuty);
+			TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_DISABLE);
+        	break;
+
+        case 0b001:
+        	// Phase A : HiZ
+				__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+				TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_1, TIM_CCxN_DISABLE);
+
+				// Phase B : current out
+				__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+				TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_2, TIM_CCxN_ENABLE);
+
+				// Phase B : current in
+				__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, g_uiBldcDuty);
+				TIM_ComplementaryChCtl(htim1.Instance, TIM_CHANNEL_3, TIM_CCxN_DISABLE);
+        	break;
+
+        // 추�? ?��?�� ?��?�� (0b110, 0b010, 0b011, 0b001)
+        // �?????? ?��?��?��?�� TIM1?�� 출력 ?��?�� ?��?��
+    }
+}
 /* USER CODE END 4 */
 
 /**

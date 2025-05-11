@@ -61,6 +61,7 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define B1_Pin GPIO_PIN_13
 #define B1_GPIO_Port GPIOC
+#define B1_EXTI_IRQn EXTI15_10_IRQn
 #define A2C6_RESV_Pin GPIO_PIN_0
 #define A2C6_RESV_GPIO_Port GPIOC
 #define A1C1_CurrA_Pin GPIO_PIN_0
@@ -75,12 +76,29 @@ void Error_Handler(void);
 #define A2C17_CurrB_GPIO_Port GPIOA
 #define BOARD_LED_Pin GPIO_PIN_5
 #define BOARD_LED_GPIO_Port GPIOA
+#define GPE_HALL_3_Pin GPIO_PIN_10
+#define GPE_HALL_3_GPIO_Port GPIOB
+#define GPE_HALL_3_EXTI_IRQn EXTI15_10_IRQn
+#define BLDC_U_EN_Pin GPIO_PIN_13
+#define BLDC_U_EN_GPIO_Port GPIOB
+#define BLDC_V_EN_Pin GPIO_PIN_14
+#define BLDC_V_EN_GPIO_Port GPIOB
+#define BLDC_W_EN_Pin GPIO_PIN_15
+#define BLDC_W_EN_GPIO_Port GPIOB
+#define DRV_ENABLE_Pin GPIO_PIN_11
+#define DRV_ENABLE_GPIO_Port GPIOA
 #define T_SWDIO_Pin GPIO_PIN_13
 #define T_SWDIO_GPIO_Port GPIOA
 #define T_SWCLK_Pin GPIO_PIN_14
 #define T_SWCLK_GPIO_Port GPIOA
-#define GPE_HALL_W_Pin GPIO_PIN_5
-#define GPE_HALL_W_GPIO_Port GPIOB
+#define GPE_HALL_1_Pin GPIO_PIN_15
+#define GPE_HALL_1_GPIO_Port GPIOA
+#define GPE_HALL_1_EXTI_IRQn EXTI15_10_IRQn
+#define GPE_HALL_2_Pin GPIO_PIN_3
+#define GPE_HALL_2_GPIO_Port GPIOB
+#define GPE_HALL_2_EXTI_IRQn EXTI3_IRQn
+#define DRV_STANDBY_Pin GPIO_PIN_5
+#define DRV_STANDBY_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
